@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""CLI chatbot using the Claude API with a custom system prompt.
+"""CLI chatbot using OpenRouter (nvidia/nemotron-3-ultra-550b-a55b:free) with
+a custom system prompt.
 
 Demonstrates three prompt-engineering patterns:
   - Zero-shot        : ask directly, no examples, no reasoning scaffold
@@ -17,10 +18,11 @@ import argparse
 import os
 import sys
 
-import anthropic
+from openai import OpenAI
 
-MODEL = os.environ.get("CLAUDE_MODEL", "claude-opus-5")
-MAX_TOKENS = 2048
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+MODEL = os.environ.get("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
+MAX_TOKENS = 1024
 
 SYSTEM_PROMPT = (
     "You are Nova, a friendly and knowledgeable assistant for a coding "
@@ -45,44 +47,48 @@ Sentiment: Positive
 """
 
 
-def get_client() -> anthropic.Anthropic:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+def get_client() -> OpenAI:
+    api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
-        print("Error: ANTHROPIC_API_KEY is not set.")
+        print("Error: OPENROUTER_API_KEY is not set.")
         print("Copy .env.example to .env, add your key, then run:")
-        print("  export ANTHROPIC_API_KEY=your-key-here   (macOS/Linux)")
-        print("  $env:ANTHROPIC_API_KEY='your-key-here'   (PowerShell)")
+        print("  export OPENROUTER_API_KEY=your-key-here   (macOS/Linux)")
+        print("  $env:OPENROUTER_API_KEY='your-key-here'   (PowerShell)")
+        print("Get a free key at https://openrouter.ai/keys")
         sys.exit(1)
-    return anthropic.Anthropic(api_key=api_key)
+    return OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
 
 
-def ask(client: anthropic.Anthropic, messages: list, label: str | None = None) -> str:
-    """Send messages to Claude with the shared system prompt and print the reply."""
+def ask(client: OpenAI, messages: list, label: str | None = None) -> str:
+    """Send messages (with the system prompt prepended) and print the reply."""
     if label:
         print(f"\n--- {label} ---")
-    response = client.messages.create(
+    response = client.chat.completions.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
-        system=SYSTEM_PROMPT,
-        messages=messages,
+        messages=[{"role": "system", "content": SYSTEM_PROMPT}, *messages],
+        extra_headers={
+            "HTTP-Referer": "https://github.com/rakeshjewargi/claude-cli-chatbot",
+            "X-Title": "CLI Chatbot Prompt Patterns Demo",
+        },
     )
-    text = "".join(block.text for block in response.content if block.type == "text")
-    print(f"Claude: {text}\n")
+    text = response.choices[0].message.content
+    print(f"Assistant: {text}\n")
     return text
 
 
-def run_zero_shot(client: anthropic.Anthropic, question: str) -> str:
+def run_zero_shot(client: OpenAI, question: str) -> str:
     messages = [{"role": "user", "content": question}]
     return ask(client, messages, label=f"ZERO-SHOT\nQ: {question}")
 
 
-def run_few_shot(client: anthropic.Anthropic, review: str) -> str:
+def run_few_shot(client: OpenAI, review: str) -> str:
     prompt = f'{FEW_SHOT_EXAMPLES}\nReview: "{review}"\nSentiment:'
     messages = [{"role": "user", "content": prompt}]
     return ask(client, messages, label=f"FEW-SHOT\nInput: {review}")
 
 
-def run_chain_of_thought(client: anthropic.Anthropic, question: str) -> str:
+def run_chain_of_thought(client: OpenAI, question: str) -> str:
     prompt = (
         f"{question}\n\n"
         "Think through this step by step, showing your reasoning, then give "
@@ -92,7 +98,7 @@ def run_chain_of_thought(client: anthropic.Anthropic, question: str) -> str:
     return ask(client, messages, label=f"CHAIN-OF-THOUGHT\nQ: {question}")
 
 
-def run_demo(client: anthropic.Anthropic) -> None:
+def run_demo(client: OpenAI) -> None:
     """Run one canned example of each pattern back to back."""
     run_zero_shot(client, "What is the capital of Australia?")
     run_few_shot(client, "The screen cracked after one week and support never replied.")
@@ -114,8 +120,8 @@ HELP_TEXT = (
 )
 
 
-def chat_loop(client: anthropic.Anthropic) -> None:
-    print(f"Claude CLI Chatbot (model: {MODEL})")
+def chat_loop(client: OpenAI) -> None:
+    print(f"CLI Chatbot (model: {MODEL})")
     print("Type a message to chat normally, or use a pattern command:")
     print(HELP_TEXT)
 
@@ -150,19 +156,22 @@ def chat_loop(client: anthropic.Anthropic) -> None:
 
         # Plain chat turn — keeps running conversation history.
         history.append({"role": "user", "content": user_input})
-        response = client.messages.create(
+        response = client.chat.completions.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
-            messages=history,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT}, *history],
+            extra_headers={
+                "HTTP-Referer": "https://github.com/rakeshjewargi/claude-cli-chatbot",
+                "X-Title": "CLI Chatbot Prompt Patterns Demo",
+            },
         )
-        text = "".join(block.text for block in response.content if block.type == "text")
-        print(f"Claude: {text}\n")
+        text = response.choices[0].message.content
+        print(f"Assistant: {text}\n")
         history.append({"role": "assistant", "content": text})
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="CLI chatbot using the Claude API")
+    parser = argparse.ArgumentParser(description="CLI chatbot using OpenRouter")
     parser.add_argument(
         "mode",
         nargs="?",

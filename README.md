@@ -1,21 +1,29 @@
-# Claude CLI Chatbot
+# CLI Chatbot — Prompt Patterns Demo
 
-A command-line chatbot built on the [Claude API](https://docs.claude.com/) with a custom
-system prompt, demonstrating three core prompt-engineering patterns: **zero-shot**,
-**few-shot**, and **chain-of-thought**.
+A command-line chatbot with a custom system prompt, demonstrating three core
+prompt-engineering patterns: **zero-shot**, **few-shot**, and **chain-of-thought**.
 
-Built as the W01 session deliverable for [upskill.intelliforge.tech](https://upskill.intelliforge.tech).
+Built for the W01 session deliverable for [upskill.intelliforge.tech](https://upskill.intelliforge.tech).
+
+> **⚠️ Note on the assignment brief:** the original brief for this deliverable calls
+> for the **Claude API** specifically ("Claude API integrated with a system prompt").
+> This version runs on **OpenRouter** against the free `nvidia/nemotron-3-ultra-550b-a55b:free`
+> model instead, to avoid needing paid Claude API credits. The prompt-pattern logic
+> (system prompt, zero-shot, few-shot, chain-of-thought) is identical either way —
+> only the API client and model differ — but as written, this repo does **not**
+> satisfy the "Claude API" success criterion. See [Using Claude instead](#using-claude-instead)
+> below to switch back if the assignment requires it.
 
 ## Features
 
 - Interactive CLI chat loop with conversation history
 - Custom system prompt (a bootcamp-assistant persona named "Nova")
 - Three prompt patterns available both as slash commands in chat and as a one-shot demo
-- No external dependencies beyond the official `anthropic` Python SDK
+- Runs on OpenRouter's free tier — no paid API credits required
 
 ## Setup
 
-**Requirements:** Python 3.9+ and an [Anthropic API key](https://console.anthropic.com/settings/keys).
+**Requirements:** Python 3.9+ and a free [OpenRouter API key](https://openrouter.ai/keys).
 
 ```bash
 git clone <this-repo-url>
@@ -25,8 +33,8 @@ pip install -r requirements.txt
 # Provide your API key
 cp .env.example .env      # then edit .env and paste your key
 # or, one-off in your shell:
-export ANTHROPIC_API_KEY=your-api-key-here      # macOS/Linux
-$env:ANTHROPIC_API_KEY='your-api-key-here'       # Windows PowerShell
+export OPENROUTER_API_KEY=your-api-key-here      # macOS/Linux
+$env:OPENROUTER_API_KEY='your-api-key-here'       # Windows PowerShell
 ```
 
 ## Usage
@@ -89,9 +97,7 @@ $ python chatbot.py demo
 
 --- ZERO-SHOT
 Q: What is the capital of Australia? ---
-Claude: The capital of Australia is Canberra. It's often mistaken for Sydney
-or Melbourne, but Canberra was purpose-built as the capital in the early 20th
-century as a compromise between the two larger, rival cities.
+Assistant: Canberra is the capital of Australia.
 ```
 
 ### 2. Few-shot
@@ -124,7 +130,7 @@ prompt = f'{FEW_SHOT_EXAMPLES}\nReview: "{review}"\nSentiment:'
 ```
 --- FEW-SHOT
 Input: The screen cracked after one week and support never replied. ---
-Claude: Negative
+Assistant: Negative
 ```
 
 Note how the few-shot examples pin the output to a single word in the same
@@ -154,29 +160,46 @@ prompt = (
 Q: A train leaves Station A at 60 km/h. Two hours later, a second train
 leaves the same station on the same track at 90 km/h. How long does it
 take the second train to catch up to the first? ---
-Claude: Let me work through this step by step.
+Assistant: The first train has a 2-hour head start, traveling at 60 km/h, so it is 120 km ahead when the second train starts.
 
-1. When the second train departs, the first train has already been
-   traveling for 2 hours at 60 km/h, so it has a head start of
-   2 x 60 = 120 km.
-2. The second train needs to close that 120 km gap. It travels at
-   90 km/h while the first train continues at 60 km/h, so the gap
-   closes at a relative speed of 90 - 60 = 30 km/h.
-3. Time to close a 120 km gap at 30 km/h = 120 / 30 = 4 hours.
+Let t be the time (in hours) after the second train starts until it catches up.
 
-Answer: The second train catches up to the first 4 hours after it departs.
+Distance traveled by second train: 90t km.
+Distance traveled by first train during that same time: 60t km, plus its 120 km head start: 120 + 60t km.
+
+Set the distances equal:
+90t = 120 + 60t
+30t = 120
+t = 4
+
+Answer: 4 hours
 ```
 
-> Sample outputs above are representative example runs generated with this
-> project's default system prompt and model. Run `python chatbot.py demo`
-> yourself to reproduce them (responses will vary slightly run to run).
+> Sample outputs above are captured from a real run of `python chatbot.py demo`
+> against `nvidia/nemotron-3-ultra-550b-a55b:free`. Exact wording will vary
+> between runs.
+
+## Using Claude instead
+
+If you need this to run on the Claude API to satisfy an assignment requirement,
+the change is small since the prompt-pattern functions don't change:
+
+1. `pip install anthropic` (instead of `openai`)
+2. Replace the client with `anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])`
+3. Replace `client.chat.completions.create(model=..., messages=[{"role": "system", ...}, ...])`
+   with `client.messages.create(model=..., system=SYSTEM_PROMPT, messages=[...])`
+   (Claude takes the system prompt as a separate top-level parameter, not a
+   message in the array) and read the reply from `response.content[0].text`
+   instead of `response.choices[0].message.content`
+4. Default model: `claude-opus-5` (or `claude-haiku-4-5` for a cheaper option)
+5. Requires a funded Anthropic account — see [console.anthropic.com/settings/billing](https://console.anthropic.com/settings/billing)
 
 ## Project structure
 
 ```
 claude-cli-chatbot/
 ├── chatbot.py         # CLI entry point + the three prompt-pattern implementations
-├── requirements.txt   # anthropic SDK
+├── requirements.txt   # openai SDK (used against OpenRouter's API)
 ├── .env.example        # template for your API key
 ├── .gitignore
 └── README.md
@@ -184,10 +207,10 @@ claude-cli-chatbot/
 
 ## Configuration
 
-| Env var             | Purpose                                  | Default          |
-| -------------------- | ----------------------------------------- | ---------------- |
-| `ANTHROPIC_API_KEY`  | Your Claude API key (required)            | —                 |
-| `CLAUDE_MODEL`       | Override the model used for all requests  | `claude-opus-5`   |
+| Env var             | Purpose                                  | Default                                     |
+| -------------------- | ----------------------------------------- | -------------------------------------------- |
+| `OPENROUTER_API_KEY` | Your OpenRouter API key (required)        | —                                             |
+| `OPENROUTER_MODEL`   | Override the model used for all requests  | `nvidia/nemotron-3-ultra-550b-a55b:free`      |
 
 ## License
 
