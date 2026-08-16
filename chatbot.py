@@ -18,7 +18,18 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
 from openai import OpenAI
+
+load_dotenv()  # reads .env in the current directory, if present, into os.environ
+
+# Windows consoles often default to a legacy codepage (e.g. cp1252) that can't
+# encode characters some models produce (arrows, math symbols, em dashes).
+# Force UTF-8 on stdout so those never crash the CLI.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except AttributeError:
+    pass  # stdout doesn't support reconfigure (e.g. captured by a test runner)
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 MODEL = os.environ.get("OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
